@@ -1,0 +1,9 @@
+# models and runtime artifacts - never commit these
+.claude/
+models_cache/
+outputs/
+.venv/
+.uv_cache/
+tests/tmp/
+__pycache__/
+*.pyc

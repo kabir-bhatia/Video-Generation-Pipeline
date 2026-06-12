@@ -1,0 +1,20 @@
+# Python 3.10+. ffmpeg must be on PATH (see README for the harfbuzz note).
+#
+# torch: the default PyPI build is CPU-only on Windows. For an NVIDIA GPU,
+# install the CUDA build first and pip will leave it alone, e.g.:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu126
+torch
+diffusers
+transformers
+accelerate
+gradio
+soundfile
+# the pipeline runs a torch<->numpy conversion self-check at startup
+# (pipeline/run.py); if it fails after a numpy upgrade, downgrade numpy
+numpy>=2.1,<3
+pillow
+requests
+uroman          # romanizes Hindi text for MMS-TTS
+
+# Optional extras
+# kokoro        # higher-quality English voice (pip install kokoro)
