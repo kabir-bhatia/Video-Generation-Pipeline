@@ -1,6 +1,6 @@
 """Topic-to-video explainer pipeline.
 
-Stages: script generation -> image generation -> TTS voiceover -> ffmpeg assembly.
+Stages: script generation -> scene-video generation -> TTS voiceover -> ffmpeg assembly.
 Every stage has swappable open-source backends (see pipeline.config).
 """
 

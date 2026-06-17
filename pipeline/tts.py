@@ -10,6 +10,7 @@ Backends:
 from __future__ import annotations
 
 import logging
+import os
 import re
 from pathlib import Path
 
@@ -36,7 +37,13 @@ class MMSTTS:
         log.info("loading TTS model %s", model_id)
         self.tokenizer = AutoTokenizer.from_pretrained(model_id)
         self.model = VitsModel.from_pretrained(model_id)
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        forced_device = os.environ.get("VIDEO_PIPELINE_TTS_DEVICE", "").strip().lower()
+        if forced_device not in {"", "cpu", "cuda"}:
+            raise ValueError("VIDEO_PIPELINE_TTS_DEVICE must be 'cpu', 'cuda', or unset")
+        self.device = forced_device or ("cuda" if torch.cuda.is_available() else "cpu")
+        if self.device == "cuda" and not torch.cuda.is_available():
+            log.warning("TTS requested cuda but CUDA is unavailable; falling back to cpu")
+            self.device = "cpu"
         self.model.to(self.device)
         self.sample_rate = self.model.config.sampling_rate
 

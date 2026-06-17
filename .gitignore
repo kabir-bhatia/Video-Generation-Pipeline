@@ -7,3 +7,4 @@ outputs/
 tests/tmp/
 __pycache__/
 *.pyc
+.serena/

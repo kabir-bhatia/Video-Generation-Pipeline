@@ -8,7 +8,7 @@ import re
 import time
 from pathlib import Path
 
-from . import assemble, config, text_overlay, tts
+from . import assemble, config, text_overlay, video_gen
 
 log = logging.getLogger(__name__)
 
@@ -99,8 +99,9 @@ def run_pipeline(
     orientation: str = "horizontal",
     language: str = "en",
     script_model: str = config.DEFAULT_SCRIPT_MODEL,
-    image_model: str = config.DEFAULT_IMAGE_MODEL,
+    video_model: str = config.DEFAULT_VIDEO_MODEL,
     tts_model: str = config.DEFAULT_TTS_MODEL,
+    runtime_profile: str = config.DEFAULT_RUNTIME_PROFILE,
     ollama_model: str = "llama3.2",
     seed: int = 42,
     progress=None,
@@ -116,10 +117,12 @@ def run_pipeline(
         raise ValueError(f"orientation must be one of {list(config.ORIENTATIONS)}")
     if language not in config.LANGUAGES:
         raise ValueError(f"language must be one of {list(config.LANGUAGES)}")
+    if runtime_profile not in config.RUNTIME_PROFILES:
+        raise ValueError(f"runtime_profile must be one of {list(config.RUNTIME_PROFILES)}")
     duration_s = max(20, min(180, int(duration_s)))
 
     workdir = OUTPUT_ROOT / f"{time.strftime('%Y%m%d-%H%M%S')}_{_slug(topic)}"
-    (workdir / "images").mkdir(parents=True)
+    (workdir / "videos").mkdir(parents=True)
     (workdir / "audio").mkdir()
 
     # ---- 1. script (subprocess: returns the LLM's memory to the OS) -------
@@ -130,25 +133,33 @@ def run_pipeline(
     n = len(scenes)
     report(f"Script ready: {n} scenes", 0.15)
 
-    # ---- 2. images -------------------------------------------------------
+    # ---- 2. scene videos -------------------------------------------------
     # first point where this process itself needs torch; check lazily so the
     # parent doesn't hold torch's memory while the script subprocess runs
     _check_torch_numpy()
     gen = None
     try:
-        from .image_gen import ImageGenerator
-        gen = ImageGenerator(image_model)
-        images = []
+        gen = video_gen.make_video_generator(video_model, runtime_profile)
+        scene_videos = []
         for i, scene in enumerate(scenes):
-            report(f"Generating image {i + 1}/{n}", 0.15 + 0.40 * i / n)
-            images.append(gen.generate(scene["image_prompt"], orientation,
-                                       seed + i, workdir / "images" / f"scene_{i:02d}.png"))
+            report(f"Generating video scene {i + 1}/{n}", 0.15 + 0.40 * i / n)
+            scene_videos.append(
+                gen.generate(
+                    scene["video_prompt"],
+                    scene.get("motion_hint", ""),
+                    orientation,
+                    seed + i,
+                    workdir / "videos" / f"scene_{i:02d}.mp4",
+                )
+            )
     finally:
         if gen is not None:
             gen.close()  # free VRAM/RAM before TTS loads
 
     # ---- 3. voiceover ----------------------------------------------------
     report("Loading voice model...", 0.58)
+    from . import tts
+
     voice = tts.make_tts(tts_model, language)
     wavs, audio_durs = [], []
     for i, scene in enumerate(scenes):
@@ -164,11 +175,11 @@ def run_pipeline(
         term = scene.get("key_term", "").strip()
         overlays.append(
             text_overlay.render_overlay(term, w, h, language,
-                                        workdir / "images" / f"overlay_{i:02d}.png")
+                                        workdir / "videos" / f"overlay_{i:02d}.png")
             if term else None)
 
     report("Assembling video...", 0.82)
-    final = assemble.assemble(images, overlays, wavs, audio_durs, orientation,
+    final = assemble.assemble(scene_videos, overlays, wavs, audio_durs, orientation,
                               workdir,
                               progress=lambda m: report(m, 0.85))
     report("Done", 1.0)

@@ -2,10 +2,12 @@
 
 A script is a dict:
     {"title": str,
-     "scenes": [{"narration": str, "image_prompt": str, "key_term": str}, ...]}
+     "scenes": [{"narration": str, "video_prompt": str,
+                 "motion_hint": str, "key_term": str}, ...]}
 
 narration  - spoken voiceover text (English or Hindi)
-image_prompt - English Stable Diffusion prompt for the scene
+video_prompt - English text-to-video prompt for the scene
+motion_hint - English motion/camera hint for the scene clip
 key_term   - short on-screen text overlay ("" to skip)
 """
 
@@ -30,11 +32,12 @@ Rules:
 - Exactly {n_scenes} scenes.
 - Each scene's "narration" is about {words_per_scene} words of spoken voiceover. {lang_rule}
 - Scene 1 hooks the viewer; the last scene gives a crisp takeaway.
-- Each scene's "image_prompt" is an English text-to-image prompt describing a single clear illustrative picture for that scene (style: clean modern digital illustration, no text in image, no people's faces close-up).
+- Each scene's "video_prompt" is an English text-to-video prompt describing a single clear scene for that moment (style: clean modern digital illustration, no text in frame, no people's faces close-up).
+- Each scene's "motion_hint" is a short English instruction for how the scene should move or how the camera should move.
 - Each scene's "key_term" is a 1-4 word on-screen label for the scene's main idea{key_term_lang}, or "" if none fits.
 
 Return JSON exactly in this shape:
-{{"title": "...", "scenes": [{{"narration": "...", "image_prompt": "...", "key_term": "..."}}]}}"""
+{{"title": "...", "scenes": [{{"narration": "...", "video_prompt": "...", "motion_hint": "...", "key_term": "..."}}]}}"""
 
 _LANG_RULES = {
     "en": "Write the narration in simple, conversational English.",
@@ -86,8 +89,9 @@ def _validate(script: dict, n_scenes: int, min_scenes: int = 2) -> dict:
             continue
         clean.append({
             "narration": narration,
-            "image_prompt": str(s.get("image_prompt", "")).strip()
-                            or "clean modern digital illustration, abstract concept",
+            "video_prompt": str(s.get("video_prompt", "") or s.get("image_prompt", "")).strip()
+                            or "clean modern digital illustration, abstract concept, cinematic motion",
+            "motion_hint": str(s.get("motion_hint", "")).strip() or "gentle forward motion",
             "key_term": str(s.get("key_term", "")).strip(),
         })
     if len(clean) < min_scenes:
@@ -143,8 +147,8 @@ class _HFChat:
         return self.tokenizer.decode(out[0][prompt_len:], skip_special_tokens=True)
 
     def close(self):
-        # free LLM before Stable Diffusion loads - both at once
-        # crashes this 4 GB VRAM / tight-RAM machine
+        # free the script model before scene-video generation loads
+        # on a tight-memory machine
         import gc
         del self.model
         gc.collect()
@@ -186,7 +190,7 @@ Write {n_more} MORE scenes that continue it (do not repeat earlier content; the
 final one of these gives a crisp takeaway). Same rules as before: narration of
 about {words_per_scene} words per scene. {lang_rule}
 Return JSON exactly in this shape:
-{{"scenes": [{{"narration": "...", "image_prompt": "...", "key_term": "..."}}]}}"""
+{{"scenes": [{{"narration": "...", "video_prompt": "...", "motion_hint": "...", "key_term": "..."}}]}}"""
 
 
 def _generate_llm(chat, topic: str, language: str,
@@ -247,8 +251,9 @@ def _generate_template(topic: str, language: str, n_scenes: int) -> dict:
     for i in range(min(n_scenes, len(lines))):
         scenes.append({
             "narration": lines[i],
-            "image_prompt": f"clean modern digital illustration about {topic}, "
-                            f"concept art, vibrant colors, no text",
+            "video_prompt": f"clean modern digital illustration about {topic}, "
+                            f"concept art, vibrant colors, no text in frame",
+            "motion_hint": "slow cinematic camera move with subtle subject motion",
             "key_term": terms[i],
         })
     return {"title": topic, "scenes": scenes}
@@ -293,7 +298,7 @@ def translate_to_hindi(script: dict) -> dict:
 
     Small local LLMs write incoherent Hindi directly; English generation
     followed by a dedicated open-source MT model gives far better scripts.
-    Image prompts stay in English for Stable Diffusion.
+    Video prompts and motion hints stay in English for the video model.
     """
     tr = _nllb_translator("eng_Latn", "hin_Deva")
 

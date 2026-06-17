@@ -1,4 +1,4 @@
-"""Gradio UI: topic + duration + orientation + language in, downloadable video out."""
+"""Gradio UI: topic + settings in, scene-video explainer out."""
 
 import logging
 
@@ -13,12 +13,15 @@ logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
 _SCRIPT_CHOICES = [(label, key) for key, (label, *_rest) in config.SCRIPT_MODELS.items()]
-_IMAGE_CHOICES = [(label, key) for key, (label, *_rest) in config.IMAGE_MODELS.items()]
+_VIDEO_CHOICES = [(label, key) for key, (label, *_rest) in config.VIDEO_MODELS.items()]
 _TTS_CHOICES = [(label, key) for key, (label, _langs) in config.TTS_MODELS.items()]
+_PROFILE_CHOICES = [
+    (profile["label"], key) for key, profile in config.RUNTIME_PROFILES.items()
+]
 
 
-def generate(topic, duration, orientation, language, script_model, image_model,
-             tts_model, ollama_model, progress=gr.Progress()):
+def generate(topic, duration, orientation, language, script_model, video_model,
+             runtime_profile, tts_model, ollama_model, progress=gr.Progress()):
     if not topic or not topic.strip():
         raise gr.Error("Please enter a topic.")
     lang_key = "hi" if language == "Hindi" else "en"
@@ -36,8 +39,9 @@ def generate(topic, duration, orientation, language, script_model, image_model,
             orientation=orientation.lower(),
             language=lang_key,
             script_model=script_model,
-            image_model=image_model,
+            video_model=video_model,
             tts_model=tts_model,
+            runtime_profile=runtime_profile,
             ollama_model=ollama_model.strip() or "llama3.2",
             progress=cb,
         )
@@ -49,7 +53,7 @@ def generate(topic, duration, orientation, language, script_model, image_model,
 with gr.Blocks(title="Topic → Explainer Video") as demo:
     gr.Markdown("# 🎬 Topic → Explainer Video\n"
                 "Type a topic, pick duration / orientation / language, and get a "
-                "narrated slideshow video with AI images, motion, and crossfades.")
+                "narrated video made from generated scene clips, overlays, and crossfades.")
 
     with gr.Row():
         with gr.Column(scale=1):
@@ -68,9 +72,12 @@ with gr.Blocks(title="Topic → Explainer Video") as demo:
                                            label="Script model")
                 ollama_model = gr.Textbox(value="llama3.2",
                                           label="Ollama model name (if Ollama selected)")
-                image_model = gr.Dropdown(_IMAGE_CHOICES,
-                                          value=config.DEFAULT_IMAGE_MODEL,
-                                          label="Image model")
+                video_model = gr.Dropdown(_VIDEO_CHOICES,
+                                          value=config.DEFAULT_VIDEO_MODEL,
+                                          label="Scene video model")
+                runtime_profile = gr.Dropdown(_PROFILE_CHOICES,
+                                              value=config.DEFAULT_RUNTIME_PROFILE,
+                                              label="Runtime profile")
                 tts_model = gr.Dropdown(_TTS_CHOICES,
                                         value=config.DEFAULT_TTS_MODEL,
                                         label="Voice model")
@@ -83,7 +90,7 @@ with gr.Blocks(title="Topic → Explainer Video") as demo:
 
     go.click(generate,
              inputs=[topic, duration, orientation, language,
-                     script_model, image_model, tts_model, ollama_model],
+                     script_model, video_model, runtime_profile, tts_model, ollama_model],
              outputs=[video, script_view])
 
 if __name__ == "__main__":

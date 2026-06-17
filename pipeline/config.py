@@ -10,14 +10,21 @@ SCRIPT_MODELS = {
 }
 DEFAULT_SCRIPT_MODEL = "qwen2.5-0.5b"
 
-# ---------------------------------------------------------------- images
-# key -> (label, diffusers model id, steps, guidance)
-IMAGE_MODELS = {
-    "sd-turbo":      ("SD-Turbo (fast, default)", "stabilityai/sd-turbo", 2, 0.0),
-    "dreamshaper-8": ("DreamShaper 8 (prettier, slower)", "Lykon/dreamshaper-8", 25, 7.0),
-    "sd-1.5":        ("Stable Diffusion 1.5 (classic)", "stable-diffusion-v1-5/stable-diffusion-v1-5", 25, 7.5),
+# ---------------------------------------------------------------- scene video
+# key -> (label, backend kind, model id / None)
+VIDEO_MODELS = {
+    "debug-video": (
+        "Debug video (synthetic scene clips for local validation)",
+        "debug",
+        None,
+    ),
+    "zeroscope-576w": (
+        "ZeroScope 576w text-to-video (cloud / higher VRAM)",
+        "diffusers_t2v",
+        "cerspense/zeroscope_v2_576w",
+    ),
 }
-DEFAULT_IMAGE_MODEL = "sd-turbo"
+DEFAULT_VIDEO_MODEL = "debug-video"
 
 # ---------------------------------------------------------------- tts
 # key -> (label, supported languages)
@@ -34,11 +41,29 @@ ORIENTATIONS = {
     "horizontal": (1280, 720),
     "vertical": (720, 1280),
 }
-# generation size fed to Stable Diffusion (multiples of 8, near training res)
-GEN_SIZES = {
-    "horizontal": (768, 448),
-    "vertical": (448, 768),
+RUNTIME_PROFILES = {
+    "local_lowmem": {
+        "label": "Local low-memory",
+        "video_size": {"horizontal": (384, 224), "vertical": (224, 384)},
+        "num_frames": 16,
+        "fps": 8,
+        "num_inference_steps": 12,
+        "guidance_scale": 7.0,
+        "enable_cpu_offload": True,
+        "decode_chunk_size": 4,
+    },
+    "cloud_default": {
+        "label": "Cloud default",
+        "video_size": {"horizontal": (576, 320), "vertical": (320, 576)},
+        "num_frames": 24,
+        "fps": 8,
+        "num_inference_steps": 30,
+        "guidance_scale": 7.5,
+        "enable_cpu_offload": False,
+        "decode_chunk_size": 8,
+    },
 }
+DEFAULT_RUNTIME_PROFILE = "local_lowmem"
 
 FPS = 30
 CROSSFADE_S = 0.8          # crossfade length between slides

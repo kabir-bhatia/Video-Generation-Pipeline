@@ -11,7 +11,8 @@ result = client.predict(
     "Horizontal",              # orientation
     "English",                 # language
     "qwen2.5-0.5b",            # script model
-    "sd-turbo",                # image model
+    "debug-video",             # video model
+    "local_lowmem",            # runtime profile
     "mms",                     # tts model
     "llama3.2",                # ollama model name
     api_name="/generate",
