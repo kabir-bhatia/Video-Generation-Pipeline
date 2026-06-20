@@ -7,6 +7,9 @@ torch
 diffusers
 transformers
 accelerate
+sentencepiece    # tokenizers for several diffusers text encoders
+tiktoken         # LTX-Video text-encoder tokenizer
+protobuf         # required by some HF tokenizers
 gradio
 soundfile
 # the pipeline runs a torch<->numpy conversion self-check at startup

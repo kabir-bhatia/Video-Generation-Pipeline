@@ -12,7 +12,7 @@ from pipeline import config, run_pipeline
 def main():
     p = argparse.ArgumentParser(description="Topic -> explainer video")
     p.add_argument("topic")
-    p.add_argument("--duration", type=int, default=60, help="target seconds (30-180)")
+    p.add_argument("--duration", type=int, default=60, help="target seconds (30-240)")
     p.add_argument("--orientation", choices=list(config.ORIENTATIONS),
                    default="horizontal")
     p.add_argument("--language", choices=list(config.LANGUAGES), default="en")
