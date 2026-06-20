@@ -18,15 +18,38 @@ def _run_ffmpeg(args: list[str]):
         raise RuntimeError(f"ffmpeg failed:\n{proc.stderr[-3000:]}")
 
 
+def _make_boomerang(scene_video: Path, out_path: Path) -> Path:
+    """Forward + reversed copy so a short clip can fill a longer scene without the
+    jarring hard cut-back that `-stream_loop` alone produces. The motion ping-pongs
+    seamlessly, which reads far better than a visible loop seam."""
+    _run_ffmpeg([
+        "-i", str(scene_video),
+        "-filter_complex", "[0:v]split[a][b];[b]reverse[r];[a][r]concat=n=2:v=1[v]",
+        "-map", "[v]",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+        "-pix_fmt", "yuv420p", "-an",
+        str(out_path),
+    ])
+    return out_path
+
+
 def render_scene_clip(scene_video: Path, overlay: Path | None, duration_s: float,
                       orientation: str, out_path: Path) -> Path:
     w, h = config.ORIENTATIONS[orientation]
     fps = config.FPS
-    args: list[str] = ["-stream_loop", "-1", "-i", str(scene_video)]
 
+    # ping-pong source hides repetition when the clip is shorter than the scene
+    boomerang = _make_boomerang(scene_video, out_path.with_name(out_path.stem + "_bm.mp4"))
+    args: list[str] = ["-stream_loop", "-1", "-i", str(boomerang)]
+
+    # subtle slow zoom (Ken Burns) adds life and further masks any residual loop
+    zoom = (
+        f"zoompan=z='min(zoom+0.0007,1.12)':d=1:fps={fps}:s={w}x{h}:"
+        f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+    )
     base = (
         f"[0:v]fps={fps},scale={w}:{h}:force_original_aspect_ratio=decrease,"
-        f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,"
+        f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:setsar=1,{zoom},"
         f"trim=duration={duration_s:.3f},setpts=N/({fps}*TB)[base]"
     )
     if overlay is not None:

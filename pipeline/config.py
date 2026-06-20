@@ -3,12 +3,13 @@
 # ---------------------------------------------------------------- script
 # key -> (label, backend kind, model id / None)
 SCRIPT_MODELS = {
-    "qwen2.5-0.5b": ("Qwen2.5-0.5B-Instruct (local, default)", "hf", "Qwen/Qwen2.5-0.5B-Instruct"),
-    "qwen2.5-1.5b": ("Qwen2.5-1.5B-Instruct (local, better, needs more RAM)", "hf", "Qwen/Qwen2.5-1.5B-Instruct"),
-    "ollama":       ("Ollama (best quality, needs ollama serve running)", "ollama", None),
+    "qwen2.5-7b":   ("Qwen2.5-7B-Instruct (best prompts, needs a GPU - default)", "hf", "Qwen/Qwen2.5-7B-Instruct"),
+    "qwen2.5-1.5b": ("Qwen2.5-1.5B-Instruct (lighter, decent)", "hf", "Qwen/Qwen2.5-1.5B-Instruct"),
+    "qwen2.5-0.5b": ("Qwen2.5-0.5B-Instruct (tiny, low-resource)", "hf", "Qwen/Qwen2.5-0.5B-Instruct"),
+    "ollama":       ("Ollama (needs ollama serve running)", "ollama", None),
     "template":     ("Template fallback (no LLM, placeholder text)", "template", None),
 }
-DEFAULT_SCRIPT_MODEL = "qwen2.5-0.5b"
+DEFAULT_SCRIPT_MODEL = "qwen2.5-7b"
 
 # ---------------------------------------------------------------- scene video
 # key -> (label, backend kind, model id / None)
@@ -59,10 +60,11 @@ ORIENTATIONS = {
 RUNTIME_PROFILES = {
     "cloud_high": {
         "label": "Cloud high quality (>=16 GB GPU, e.g. L4/A10/A100)",
-        "video_size": {"horizontal": (704, 480), "vertical": (480, 704)},
-        "num_frames": 81,
+        # 768x512 both divisible by 32 (LTX requirement); ~22 GB peak on an L4.
+        "video_size": {"horizontal": (768, 512), "vertical": (512, 768)},
+        "num_frames": 97,            # (97-1) % 8 == 0; ~4s @ 24fps, less looping
         "fps": 24,
-        "num_inference_steps": 35,
+        "num_inference_steps": 45,   # more detail; verify peak < ~22.5 GB on the L4
         "guidance_scale": 3.0,
         "enable_cpu_offload": False,
         "low_vram_opts": False,
@@ -104,5 +106,7 @@ MIN_SLIDE_S = 3.0
 
 # approximate speaking rate, words per second, used to size the script
 WORDS_PER_SECOND = {"en": 2.4}
-SECONDS_PER_SCENE = 12     # target average scene length -> scene count
-MAX_SCENES = 24            # cap so a 4 min video stays generatable in reasonable time
+# target average scene length -> scene count. Kept close to the boomerang clip
+# length (~8s) so each scene is mostly covered by one clip with little looping.
+SECONDS_PER_SCENE = 8
+MAX_SCENES = 28            # cap so a 4 min video stays generatable in reasonable time

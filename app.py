@@ -99,7 +99,7 @@ with gr.Blocks(title="Topic → Explainer Video") as demo:
             go = gr.Button("Generate video", variant="primary")
 
         with gr.Column(scale=1):
-            video = gr.Video(label="Final video")
+            video = gr.Video(label="Final video", autoplay=True)
             download = gr.DownloadButton("⬇ Download MP4", visible=False)
             script_view = gr.JSON(label="Generated script")
 
@@ -136,5 +136,8 @@ if __name__ == "__main__":
         server_name=server_name,
         server_port=port,
         share=share,
+        # let Gradio serve finished videos straight from outputs/ (otherwise it
+        # 403s and only works via an incidental cache copy)
+        allowed_paths=[str(OUTPUT_ROOT)],
         inbrowser=os.environ.get("GRADIO_INBROWSER", "").lower() in ("1", "true", "yes"),
     )

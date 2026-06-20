@@ -2,13 +2,17 @@
 
 A script is a dict:
     {"title": str,
+     "visual_style": str,
      "scenes": [{"narration": str, "video_prompt": str,
                  "motion_hint": str, "key_term": str}, ...]}
 
-narration  - spoken voiceover text (English or Hindi)
-video_prompt - English text-to-video prompt for the scene
-motion_hint - English motion/camera hint for the scene clip
-key_term   - short on-screen text overlay ("" to skip)
+narration    - spoken voiceover text (English)
+visual_style - one global look (art style, palette, lighting, mood) reused in every
+               scene so the whole video is visually coherent
+video_prompt - detailed English text-to-video prompt for the scene; the global
+               visual_style is prepended to it in _validate()
+motion_hint  - English motion/camera hint for the scene clip
+key_term     - short on-screen text overlay ("" to skip)
 """
 
 from __future__ import annotations
@@ -22,22 +26,32 @@ from . import config
 log = logging.getLogger(__name__)
 
 _SYSTEM = (
-    "You write scripts for short slideshow explainer videos. "
-    "Reply with a single JSON object and nothing else."
+    "You are the art director and scriptwriter for short explainer videos. "
+    "You think visually and write vivid, concrete scene descriptions for a "
+    "text-to-video model. Reply with a single JSON object and nothing else."
 )
 
-_PROMPT = """Write the script for a short explainer video about: "{topic}"
+_PROMPT = """Plan a short explainer video about: "{topic}"
 
-Rules:
-- Exactly {n_scenes} scenes.
-- Each scene's "narration" is about {words_per_scene} words of spoken voiceover. {lang_rule}
-- Scene 1 hooks the viewer; the last scene gives a crisp takeaway.
-- Each scene's "video_prompt" is an English text-to-video prompt describing a single clear scene for that moment (style: clean modern digital illustration, no text in frame, no people's faces close-up).
-- Each scene's "motion_hint" is a short English instruction for how the scene should move or how the camera should move.
-- Each scene's "key_term" is a 1-4 word on-screen label for the scene's main idea{key_term_lang}, or "" if none fits.
+First decide ONE consistent "visual_style" for the whole video and reuse that look in every
+scene so the video is coherent. Write it as one sentence covering: art style (e.g. clean 3D
+render, flat vector illustration, cinematic photorealistic, papercraft), color palette,
+lighting, and overall mood. Never render text/words, logos, or watermarks in the frame, and
+avoid close-up human faces.
+
+Then write exactly {n_scenes} scenes. For each scene provide:
+- "narration": about {words_per_scene} words of spoken voiceover. {lang_rule}
+- "video_prompt": a vivid 40-70 word description of ONE concrete shot that fits the visual
+  style. Name the main SUBJECT, the SETTING/background, and the ACTION (what happens). Be
+  specific and visual - objects, colors, composition, depth. No text, captions, or logos.
+- "motion_hint": a short camera or subject motion (e.g. "slow dolly-in", "gentle pan left",
+  "subject rises upward", "particles drift past camera").
+- "key_term": a 1-4 word on-screen label for the scene's main idea{key_term_lang}, or "".
+
+Scene 1 hooks the viewer; the final scene gives a crisp takeaway.
 
 Return JSON exactly in this shape:
-{{"title": "...", "scenes": [{{"narration": "...", "video_prompt": "...", "motion_hint": "...", "key_term": "..."}}]}}"""
+{{"title": "...", "visual_style": "...", "scenes": [{{"narration": "...", "video_prompt": "...", "motion_hint": "...", "key_term": "..."}}]}}"""
 
 # English-only pipeline for now; Hindi narration + translation will return later.
 _LANG_RULES = {
@@ -77,25 +91,40 @@ def _extract_json(text: str) -> dict:
     raise ValueError("unbalanced JSON in model output")
 
 
-def _validate(script: dict, n_scenes: int, min_scenes: int = 2) -> dict:
+def _compose_prompt(visual_style: str, video_prompt: str) -> str:
+    """Prepend the global visual style so every scene shares one coherent look."""
+    base = video_prompt or "a clear concept illustration, dynamic composition"
+    style = visual_style.strip().rstrip(".")
+    if not style:
+        return base
+    # avoid doubling the style if the model already echoed it
+    if base.lower().startswith(style.lower()[:24]):
+        return base
+    return f"{style}. {base}"
+
+
+def _validate(script: dict, n_scenes: int, min_scenes: int = 2,
+              visual_style: str = "") -> dict:
     scenes = script.get("scenes")
     if not isinstance(scenes, list) or not scenes:
         raise ValueError("script has no scenes")
+    style = str(script.get("visual_style", "") or visual_style).strip()
     clean = []
     for s in scenes[:n_scenes]:
         narration = str(s.get("narration", "")).strip()
         if not narration:
             continue
+        raw_prompt = str(s.get("video_prompt", "") or s.get("image_prompt", "")).strip()
         clean.append({
             "narration": narration,
-            "video_prompt": str(s.get("video_prompt", "") or s.get("image_prompt", "")).strip()
-                            or "clean modern digital illustration, abstract concept, cinematic motion",
-            "motion_hint": str(s.get("motion_hint", "")).strip() or "gentle forward motion",
+            "video_prompt": _compose_prompt(style, raw_prompt),
+            "motion_hint": str(s.get("motion_hint", "")).strip() or "slow gentle camera move",
             "key_term": str(s.get("key_term", "")).strip(),
         })
     if len(clean) < min_scenes:
         raise ValueError(f"script has fewer than {min_scenes} usable scenes")
-    return {"title": str(script.get("title", "")).strip(), "scenes": clean}
+    return {"title": str(script.get("title", "")).strip(),
+            "visual_style": style, "scenes": clean}
 
 
 # ------------------------------------------------------------------ backends
@@ -138,7 +167,7 @@ class _HFChat:
         prompt_len = inputs["input_ids"].shape[1]
         out = self.model.generate(
             **inputs,
-            max_new_tokens=1800,
+            max_new_tokens=2400,  # richer, longer per-scene video_prompts
             do_sample=creative,
             temperature=0.8 if creative else None,
             pad_token_id=self.tokenizer.eos_token_id,
@@ -188,6 +217,8 @@ _CONTINUE_PROMPT = """The explainer video script about "{topic}" titled "{title}
 Write {n_more} MORE scenes that continue it (do not repeat earlier content; the
 final one of these gives a crisp takeaway). Same rules as before: narration of
 about {words_per_scene} words per scene. {lang_rule}
+Keep the SAME visual style as the rest of the video: "{visual_style}". Each scene's
+"video_prompt" is a vivid 40-70 word shot (subject, setting, action) in that style.
 Return JSON exactly in this shape:
 {{"scenes": [{{"narration": "...", "video_prompt": "...", "motion_hint": "...", "key_term": "..."}}]}}"""
 
@@ -220,9 +251,11 @@ def _generate_llm(chat, topic: str, language: str,
             topic=topic, title=script["title"] or topic,
             last_narration=script["scenes"][-1]["narration"],
             n_more=missing, words_per_scene=words_per_scene,
-            lang_rule=_LANG_RULES[language]), creative=True)
+            lang_rule=_LANG_RULES[language],
+            visual_style=script.get("visual_style", "")), creative=True)
         try:
-            extra = _validate(_extract_json(text), missing, min_scenes=1)
+            extra = _validate(_extract_json(text), missing, min_scenes=1,
+                              visual_style=script.get("visual_style", ""))
         except (ValueError, json.JSONDecodeError) as e:
             log.warning("continuation parse failed: %s", e)
             continue
@@ -239,16 +272,20 @@ def _generate_template(topic: str, language: str, n_scenes: int) -> dict:
              "A few simple principles explain how it works.",
              f"And that was a quick introduction to {topic}. Thanks for watching!"]
     terms = ["Introduction", "Why it matters", "How it works", "Takeaway"]
+    visual_style = ("clean modern 3D illustration, vibrant saturated palette, soft studio "
+                    "lighting, shallow depth of field, friendly explainer mood")
     scenes = []
     for i in range(min(n_scenes, len(lines))):
         scenes.append({
             "narration": lines[i],
-            "video_prompt": f"clean modern digital illustration about {topic}, "
-                            f"concept art, vibrant colors, no text in frame",
+            "video_prompt": _compose_prompt(
+                visual_style,
+                f"a clear conceptual scene illustrating {topic}, central subject with "
+                f"supporting background elements, dynamic composition"),
             "motion_hint": "slow cinematic camera move with subtle subject motion",
             "key_term": terms[i],
         })
-    return {"title": topic, "scenes": scenes}
+    return {"title": topic, "visual_style": visual_style, "scenes": scenes}
 
 
 # ------------------------------------------------------------------ entry point

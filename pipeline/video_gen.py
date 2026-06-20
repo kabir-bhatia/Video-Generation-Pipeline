@@ -17,9 +17,19 @@ log = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from PIL import Image
 
+# quality boosters appended to every prompt (the per-scene visual style comes
+# from the script's video_prompt itself). Keep these descriptive, not stylistic.
 _STYLE_SUFFIX = (
-    " cinematic motion, coherent action, clean modern digital illustration, "
-    "high quality, vivid colors, no subtitles, no watermark"
+    " Smooth natural motion, coherent consistent subject, sharp focus, highly "
+    "detailed, professional cinematography, volumetric lighting, depth of field, "
+    "high quality, 4k."
+)
+
+_NEGATIVE_PROMPT = (
+    "worst quality, low quality, blurry, out of focus, low resolution, pixelated, "
+    "jpeg artifacts, deformed, distorted, disfigured, extra limbs, glitch, flicker, "
+    "jitter, stutter, watermark, signature, text, caption, subtitles, logo, border, "
+    "static, still image, duplicate frames"
 )
 
 
@@ -143,9 +153,7 @@ class DiffusersTextToVideoGenerator:
             output_type="pil",  # default is "np"; _frames_to_mp4 wants PIL images
         )
         if "negative_prompt" in accepted:
-            kwargs["negative_prompt"] = (
-                "blurry, low quality, distorted, watermark, text, jpeg artifacts"
-            )
+            kwargs["negative_prompt"] = _NEGATIVE_PROMPT
         # decode_chunk_size only exists on frame-by-frame decoders (e.g. SVD);
         # passing it to a UNet T2V pipeline raises TypeError.
         if "decode_chunk_size" in accepted:

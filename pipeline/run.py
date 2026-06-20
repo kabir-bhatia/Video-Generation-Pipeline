@@ -43,9 +43,14 @@ def _run_stage_subprocess(op: str, in_path: Path, out_path: Path) -> dict:
 
     import os
 
-    # CPU-only for these small models: a second CUDA-torch process would
-    # double-commit GPU DLL reservations and exhaust the paging file
-    env = {**os.environ, "CUDA_VISIBLE_DEVICES": ""}
+    # The script stage runs in its own process so its memory is fully returned
+    # before the video model loads. On tight machines force it onto the CPU (a
+    # second CUDA-torch process double-commits GPU reservations); on a roomy GPU
+    # let it use CUDA so a 7B script model runs fast. Toggle with
+    # VIDEO_PIPELINE_SCRIPT_CPU=1 (default: allow GPU).
+    env = {**os.environ}
+    if os.environ.get("VIDEO_PIPELINE_SCRIPT_CPU", "").strip() in ("1", "true", "yes"):
+        env["CUDA_VISIBLE_DEVICES"] = ""
     proc = subprocess.run(
         [sys.executable, "-m", "pipeline.script_cli", op, str(in_path), str(out_path)],
         capture_output=True, text=True, env=env,
