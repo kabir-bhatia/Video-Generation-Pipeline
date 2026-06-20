@@ -49,7 +49,7 @@ def render_scene_clip(scene_video: Path, overlay: Path | None, duration_s: float
     )
     base = (
         f"[0:v]fps={fps},scale={w}:{h}:force_original_aspect_ratio=decrease,"
-        f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:setsar=1,{zoom},"
+        f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,{zoom},"
         f"trim=duration={duration_s:.3f},setpts=N/({fps}*TB)[base]"
     )
     if overlay is not None:
