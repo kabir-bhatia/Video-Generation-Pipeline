@@ -1,13 +1,11 @@
-"""Subprocess entries for the script stages.
+"""Subprocess entry for the script stage.
 
-Each memory-heavy model (script LLM, translation model) runs in its own
-process so its memory is fully returned to the OS before the next model
-loads - in-process cleanup leaves the allocator holding enough to crash
-this tight-RAM machine.
+The script LLM runs in its own process so its memory is fully returned to
+the OS before the next model loads - in-process cleanup leaves the allocator
+holding enough to crash a tight-RAM machine.
 
 Usage:
-    python -m pipeline.script_cli generate  <args.json> <out.json>
-    python -m pipeline.script_cli translate <in.json> <out.json>
+    python -m pipeline.script_cli generate <args.json> <out.json>
 """
 
 import json
@@ -25,10 +23,6 @@ def main():
         data = json.load(f)
     if op == "generate":
         result = script_gen.generate_script(**data)
-    elif op == "translate":
-        result = script_gen.translate_to_hindi(data)
-    elif op == "topic_to_en":
-        result = script_gen.translate_topic_to_english(data)
     else:
         raise SystemExit(f"unknown op: {op}")
     with open(out_path, "w", encoding="utf-8") as f:

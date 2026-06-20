@@ -77,11 +77,6 @@ class DebugVideoGenerator:
 class DiffusersTextToVideoGenerator:
     """Text-to-video backend for stronger GPUs / cloud machines."""
 
-    # rough lower bound of free VRAM (bytes) needed to run a UNet-based T2V
-    # model with cpu-offload + attention/vae slicing enabled. Below this the
-    # run dies mid-decode with an opaque CUDA OOM, so fail early instead.
-    _MIN_FREE_VRAM = 3.0 * 1024 ** 3
-
     def __init__(self, backend_key: str, profile_key: str):
         import torch
         from diffusers import DiffusionPipeline
@@ -91,16 +86,19 @@ class DiffusersTextToVideoGenerator:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self._torch = torch
         self.model_id = model_id
-        log.info("loading video model %s on %s", label, self.device)
+        log.info("loading video model %s on %s (profile %s)", label, self.device, profile_key)
 
+        # preflight VRAM guard: below the profile's floor a run dies mid-decode
+        # with an opaque CUDA OOM, so fail early with an actionable message.
+        min_free = float(self.profile.get("min_free_vram_gb", 3.0)) * 1024 ** 3
         if self.device == "cuda":
             free, total = torch.cuda.mem_get_info()
-            if free < self._MIN_FREE_VRAM:
+            if free < min_free:
                 raise RuntimeError(
-                    f"'{label}' needs ~{self._MIN_FREE_VRAM / 1e9:.1f} GB free VRAM "
-                    f"but only {free / 1e9:.1f} GB of {total / 1e9:.1f} GB is free. "
-                    f"Use the 'debug-video' backend for local validation, or run this "
-                    f"backend on a larger GPU (the 'cloud_default' profile)."
+                    f"'{label}' on profile '{profile_key}' needs ~{min_free / 1e9:.1f} GB "
+                    f"free VRAM but only {free / 1e9:.1f} GB of {total / 1e9:.1f} GB is free. "
+                    f"Pick a lighter runtime profile (e.g. 'cloud_default'/'local_lowmem'), "
+                    f"the 'debug-video' backend, or a larger GPU."
                 )
 
         dtype = torch.float16 if self.device == "cuda" else torch.float32
@@ -112,11 +110,14 @@ class DiffusersTextToVideoGenerator:
                 self.pipe.enable_model_cpu_offload()
             else:
                 self.pipe.to("cuda")
-            self.pipe.enable_attention_slicing()
-            if hasattr(self.pipe, "enable_vae_slicing"):
-                self.pipe.enable_vae_slicing()
-            if hasattr(self.pipe, "enable_vae_tiling"):
-                self.pipe.enable_vae_tiling()
+            # slicing/tiling trade speed for VRAM - only on memory-tight profiles.
+            # Big-GPU profiles keep diffusers' default (SDPA) attention for speed.
+            if self.profile.get("low_vram_opts", True):
+                self.pipe.enable_attention_slicing()
+                if hasattr(self.pipe, "enable_vae_slicing"):
+                    self.pipe.enable_vae_slicing()
+                if hasattr(self.pipe, "enable_vae_tiling"):
+                    self.pipe.enable_vae_tiling()
         else:
             self.pipe.to("cpu")
 

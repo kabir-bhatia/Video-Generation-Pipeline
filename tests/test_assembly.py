@@ -27,7 +27,7 @@ try:
         w, h = config.ORIENTATIONS["horizontal"]
         overlays.append(
             text_overlay.render_overlay(
-                term, w, h, "hi" if i == 1 else "en", workdir / f"ov_{i}.png"
+                term, w, h, "en", workdir / f"ov_{i}.png"
             ) if term else None
         )
 

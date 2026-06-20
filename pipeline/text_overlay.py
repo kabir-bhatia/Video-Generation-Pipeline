@@ -17,7 +17,8 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-# bold/regular sans for Latin, plus a Devanagari-capable font for Hindi
+# bold/regular sans for Latin (English-only pipeline for now; a Devanagari
+# font list will return alongside Hindi support)
 _FONT_CANDIDATES = {
     "en": [
         # Windows
@@ -32,20 +33,8 @@ _FONT_CANDIDATES = {
         "/System/Library/Fonts/Helvetica.ttc",
         "/Library/Fonts/Arial Bold.ttf",
     ],
-    "hi": [
-        # Windows (Nirmala UI ships with Windows 8+)
-        r"C:\Windows\Fonts\Nirmala.ttc",
-        r"C:\Windows\Fonts\mangal.ttf",
-        # Linux (fonts-noto / google-noto packages)
-        "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf",
-        "/usr/share/fonts/google-noto/NotoSansDevanagari-Regular.ttf",
-        "/usr/share/fonts/truetype/lohit-devanagari/Lohit-Devanagari.ttf",
-        # macOS
-        "/System/Library/Fonts/Supplemental/KohinoorDevanagari.ttc",
-        "/System/Library/Fonts/Supplemental/DevanagariMT.ttc",
-    ],
 }
-_ENV_OVERRIDES = {"en": "VIDEO_PIPELINE_FONT_EN", "hi": "VIDEO_PIPELINE_FONT_HI"}
+_ENV_OVERRIDES = {"en": "VIDEO_PIPELINE_FONT_EN"}
 _resolved: dict[str, str] = {}
 
 

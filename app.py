@@ -20,14 +20,10 @@ _PROFILE_CHOICES = [
 ]
 
 
-def generate(topic, duration, orientation, language, script_model, video_model,
+def generate(topic, duration, orientation, script_model, video_model,
              runtime_profile, tts_model, ollama_model, progress=gr.Progress()):
     if not topic or not topic.strip():
         raise gr.Error("Please enter a topic.")
-    lang_key = "hi" if language == "Hindi" else "en"
-    if lang_key not in config.TTS_MODELS[tts_model][1]:
-        raise gr.Error(f"The '{tts_model}' voice doesn't support {language}. "
-                       "Use 'mms' for Hindi.")
 
     def cb(msg, frac=None):
         progress(frac if frac is not None else 0.85, desc=msg)
@@ -37,7 +33,7 @@ def generate(topic, duration, orientation, language, script_model, video_model,
             topic=topic.strip(),
             duration_s=int(duration),
             orientation=orientation.lower(),
-            language=lang_key,
+            language="en",
             script_model=script_model,
             video_model=video_model,
             tts_model=tts_model,
@@ -59,12 +55,10 @@ with gr.Blocks(title="Topic → Explainer Video") as demo:
         with gr.Column(scale=1):
             topic = gr.Textbox(label="Topic",
                                placeholder='e.g. "Explain inflation in 60 seconds"')
-            duration = gr.Dropdown([30, 60, 90, 120, 180], value=60,
-                                   label="Target duration (seconds)")
+            duration = gr.Slider(minimum=30, maximum=240, step=5, value=60,
+                                 label="Target duration (seconds)")
             orientation = gr.Radio(["Horizontal", "Vertical"], value="Horizontal",
                                    label="Orientation")
-            language = gr.Radio(["English", "Hindi"], value="English",
-                                label="Voiceover language")
 
             with gr.Accordion("Advanced: swap models", open=False):
                 script_model = gr.Dropdown(_SCRIPT_CHOICES,
@@ -89,7 +83,7 @@ with gr.Blocks(title="Topic → Explainer Video") as demo:
             script_view = gr.JSON(label="Generated script")
 
     go.click(generate,
-             inputs=[topic, duration, orientation, language,
+             inputs=[topic, duration, orientation,
                      script_model, video_model, runtime_profile, tts_model, ollama_model],
              outputs=[video, script_view])
 

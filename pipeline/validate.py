@@ -9,8 +9,8 @@ from pathlib import Path
 from . import assemble, config, text_overlay, tts, video_gen
 
 
-def run_component_checks(video_model: str = config.DEFAULT_VIDEO_MODEL,
-                         runtime_profile: str = config.DEFAULT_RUNTIME_PROFILE,
+def run_component_checks(video_model: str = "debug-video",
+                         runtime_profile: str = "local_lowmem",
                          tts_model: str = config.DEFAULT_TTS_MODEL,
                          language: str = "en") -> dict:
     report = {

@@ -1,9 +1,8 @@
 """Stage 3: synthesize the voiceover, one WAV per scene.
 
-Backends:
-  mms    - Meta MMS-TTS (facebook/mms-tts-eng / facebook/mms-tts-hin). Open source,
-           supports the English/Hindi toggle. Hindi text is romanized with uroman
-           when the tokenizer requires it.
+Backends (English-only for now; Hindi/MMS multilingual returns later):
+  mms    - Meta MMS-TTS (facebook/mms-tts-eng). Open source. uroman romanizes
+           input when the tokenizer requires it.
   kokoro - Kokoro-82M (English only, Apache-2.0). Optional: pip install kokoro
 """
 
@@ -33,7 +32,7 @@ class MMSTTS:
         import torch
         from transformers import AutoTokenizer, VitsModel
 
-        model_id = {"en": "facebook/mms-tts-eng", "hi": "facebook/mms-tts-hin"}[language]
+        model_id = {"en": "facebook/mms-tts-eng"}[language]
         log.info("loading TTS model %s", model_id)
         self.tokenizer = AutoTokenizer.from_pretrained(model_id)
         self.model = VitsModel.from_pretrained(model_id)

@@ -39,12 +39,11 @@ Rules:
 Return JSON exactly in this shape:
 {{"title": "...", "scenes": [{{"narration": "...", "video_prompt": "...", "motion_hint": "...", "key_term": "..."}}]}}"""
 
+# English-only pipeline for now; Hindi narration + translation will return later.
 _LANG_RULES = {
     "en": "Write the narration in simple, conversational English.",
-    "hi": "Write the narration in simple, natural Hindi (Devanagari script). "
-          "Common English loanwords may stay in English.",
 }
-_KEY_TERM_LANG = {"en": "", "hi": " (in Hindi)"}
+_KEY_TERM_LANG = {"en": ""}
 
 
 def _build_prompt(topic: str, language: str, n_scenes: int, words_per_scene: int) -> str:
@@ -235,18 +234,11 @@ def _generate_llm(chat, topic: str, language: str,
 def _generate_template(topic: str, language: str, n_scenes: int) -> dict:
     """No-LLM fallback so the pipeline still runs end to end. Placeholder content."""
     log.warning("using template script backend - narration will be generic placeholder text")
-    if language == "hi":
-        lines = [f"आज हम समझेंगे: {topic}।",
-                 f"{topic} हमारी रोज़मर्रा की ज़िंदगी से जुड़ा एक अहम विषय है।",
-                 "इसके पीछे कुछ आसान सिद्धांत काम करते हैं।",
-                 f"तो यही था {topic} का एक छोटा परिचय। धन्यवाद!"]
-        terms = ["परिचय", "महत्व", "सिद्धांत", "निष्कर्ष"]
-    else:
-        lines = [f"Today, let's understand: {topic}.",
-                 f"{topic} touches our everyday lives in important ways.",
-                 "A few simple principles explain how it works.",
-                 f"And that was a quick introduction to {topic}. Thanks for watching!"]
-        terms = ["Introduction", "Why it matters", "How it works", "Takeaway"]
+    lines = [f"Today, let's understand: {topic}.",
+             f"{topic} touches our everyday lives in important ways.",
+             "A few simple principles explain how it works.",
+             f"And that was a quick introduction to {topic}. Thanks for watching!"]
+    terms = ["Introduction", "Why it matters", "How it works", "Takeaway"]
     scenes = []
     for i in range(min(n_scenes, len(lines))):
         scenes.append({
@@ -259,63 +251,11 @@ def _generate_template(topic: str, language: str, n_scenes: int) -> dict:
     return {"title": topic, "scenes": scenes}
 
 
-# ------------------------------------------------------------------ translation
-
-def _nllb_translator(src_lang: str, tgt_lang: str):
-    """Returns tr(text) -> text using NLLB-200 (open-source MT model)."""
-    import torch
-    from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-
-    model_id = "facebook/nllb-200-distilled-600M"
-    log.info("loading translator %s (%s -> %s)", model_id, src_lang, tgt_lang)
-    tokenizer = AutoTokenizer.from_pretrained(model_id, src_lang=src_lang)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = AutoModelForSeq2SeqLM.from_pretrained(
-        model_id, torch_dtype=torch.float16 if device == "cuda" else torch.bfloat16,
-    ).to(device)
-    tgt = tokenizer.convert_tokens_to_ids(tgt_lang)
-
-    def tr(text: str) -> str:
-        if not text.strip():
-            return text
-        inputs = tokenizer(text, return_tensors="pt", truncation=True,
-                           max_length=512).to(device)
-        out = model.generate(**inputs, forced_bos_token_id=tgt, max_new_tokens=512)
-        return tokenizer.decode(out[0], skip_special_tokens=True)
-
-    return tr
-
-
-def translate_topic_to_english(data: dict) -> dict:
-    """{"text": <hindi topic>} -> {"text": <english topic>} so the English
-    script model actually understands what to write about."""
-    tr = _nllb_translator("hin_Deva", "eng_Latn")
-    return {"text": tr(data["text"])}
-
-
-def translate_to_hindi(script: dict) -> dict:
-    """Translate narration + key terms to Hindi with NLLB-200.
-
-    Small local LLMs write incoherent Hindi directly; English generation
-    followed by a dedicated open-source MT model gives far better scripts.
-    Video prompts and motion hints stay in English for the video model.
-    """
-    tr = _nllb_translator("eng_Latn", "hin_Deva")
-
-    for scene in script["scenes"]:
-        # translate sentence by sentence - NLLB quality drops on long inputs
-        sentences = re.split(r"(?<=[.!?])\s+", scene["narration"])
-        scene["narration"] = " ".join(tr(s) for s in sentences if s.strip())
-        scene["key_term"] = tr(scene["key_term"])
-    script["title"] = tr(script.get("title", ""))
-    return script
-
-
 # ------------------------------------------------------------------ entry point
 
 def generate_script(topic: str, language: str, duration_s: int,
                     backend_key: str, ollama_model: str = "llama3.2") -> dict:
-    n_scenes = max(3, min(18, round(duration_s / config.SECONDS_PER_SCENE)))
+    n_scenes = max(3, min(config.MAX_SCENES, round(duration_s / config.SECONDS_PER_SCENE)))
     total_words = duration_s * config.WORDS_PER_SECOND[language]
     words_per_scene = max(10, round(total_words / n_scenes))
 
@@ -329,10 +269,3 @@ def generate_script(topic: str, language: str, duration_s: int,
         return _generate_llm(chat, topic, language, n_scenes, words_per_scene)
     finally:
         chat.close()
-
-
-def needs_translation(language: str, backend_key: str) -> bool:
-    """Local HF models write incoherent Hindi: generate in English instead and
-    translate afterwards (run as a separate stage so each model gets a fresh
-    process). Ollama models (llama3.2 etc.) handle Hindi natively."""
-    return language == "hi" and config.SCRIPT_MODELS[backend_key][1] == "hf"

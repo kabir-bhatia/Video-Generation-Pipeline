@@ -59,34 +59,16 @@ def _run_stage_subprocess(op: str, in_path: Path, out_path: Path) -> dict:
 def _run_script_stage(topic: str, language: str, duration_s: int,
                       script_model: str, ollama_model: str, workdir: Path,
                       report=None) -> dict:
-    from . import script_gen
-
-    translate = script_gen.needs_translation(language, script_model)
-
-    if translate and re.search(r"[ऀ-ॿ]", topic):
-        # the English script model can't read a Devanagari topic
-        if report:
-            report("Translating topic to English...", 0.03)
-        topic_path = workdir / "topic.json"
-        topic_path.write_text(json.dumps({"text": topic}), encoding="utf-8")
-        topic = _run_stage_subprocess("topic_to_en", topic_path, topic_path)["text"]
-        log.info("topic translated for the script model: %s", topic)
-
+    # English-only pipeline for now; Hindi (translation stages) will return later.
     args_path = workdir / "script_args.json"
     args_path.write_text(json.dumps({
         "topic": topic,
-        "language": "en" if translate else language,
+        "language": language,
         "duration_s": duration_s,
         "backend_key": script_model, "ollama_model": ollama_model,
     }), encoding="utf-8")
 
-    script = _run_stage_subprocess("generate", args_path, workdir / "script.json")
-    if translate:
-        if report:
-            report("Translating script to Hindi...", 0.10)
-        script = _run_stage_subprocess("translate", workdir / "script.json",
-                                       workdir / "script.json")
-    return script
+    return _run_stage_subprocess("generate", args_path, workdir / "script.json")
 
 
 def _slug(text: str) -> str:
@@ -119,7 +101,7 @@ def run_pipeline(
         raise ValueError(f"language must be one of {list(config.LANGUAGES)}")
     if runtime_profile not in config.RUNTIME_PROFILES:
         raise ValueError(f"runtime_profile must be one of {list(config.RUNTIME_PROFILES)}")
-    duration_s = max(20, min(180, int(duration_s)))
+    duration_s = max(30, min(240, int(duration_s)))
 
     workdir = OUTPUT_ROOT / f"{time.strftime('%Y%m%d-%H%M%S')}_{_slug(topic)}"
     (workdir / "videos").mkdir(parents=True)
