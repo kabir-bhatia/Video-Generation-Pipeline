@@ -8,3 +8,7 @@ tests/tmp/
 __pycache__/
 *.pyc
 .serena/
+
+# local debug artifacts
+_*.png
+_ltx_test.py
