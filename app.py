@@ -1,6 +1,7 @@
 """Gradio UI: topic + settings in, scene-video explainer out."""
 
 import logging
+import os
 
 # pipeline must be imported before gradio: gradio pulls in huggingface_hub,
 # which freezes its cache location (HF_HOME) at import time - pipeline points
@@ -88,4 +89,16 @@ with gr.Blocks(title="Topic → Explainer Video") as demo:
              outputs=[video, script_view])
 
 if __name__ == "__main__":
-    demo.queue().launch(inbrowser=True)
+    # Env-configurable so the same app.py works locally and on a headless VM:
+    #   GRADIO_SERVER_NAME=0.0.0.0   bind on all interfaces (LAN/VM access)
+    #   GRADIO_SHARE=1               create a temporary public gradio.live link
+    #   GRADIO_SERVER_PORT=7860      port to listen on
+    server_name = os.environ.get("GRADIO_SERVER_NAME", "127.0.0.1")
+    share = os.environ.get("GRADIO_SHARE", "").lower() in ("1", "true", "yes")
+    port = int(os.environ.get("GRADIO_SERVER_PORT", "7860"))
+    demo.queue().launch(
+        server_name=server_name,
+        server_port=port,
+        share=share,
+        inbrowser=os.environ.get("GRADIO_INBROWSER", "").lower() in ("1", "true", "yes"),
+    )
